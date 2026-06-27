@@ -226,8 +226,12 @@ jobs:
 
       - name: Install appimagetool
         run: |
+          # GitHub Actions runners lack FUSE, so extract the AppImage
           wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
+          ./appimagetool-x86_64.AppImage --appimage-extract >/dev/null 2>&1 || true
+          # The extracted squashfs-root/AppRun is the actual tool
+          sed -i 's|APPDIR=.*|APPDIR="$(pwd)/squashfs-root"|' squashfs-root/AppRun
 
       - name: Build AppDir
         run: |
@@ -287,7 +291,7 @@ jobs:
       - name: Build AppImage
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
-          ARCH=x86_64 ./appimagetool-x86_64.AppImage AppDir "wifi-qr-connect-${VERSION}-x86_64.AppImage"
+          ARCH=x86_64 ./squashfs-root/AppRun AppDir "wifi-qr-connect-${VERSION}-x86_64.AppImage"
           ls -la *.AppImage
 
       - name: Upload artifact
