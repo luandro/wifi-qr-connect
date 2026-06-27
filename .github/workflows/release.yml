@@ -230,8 +230,8 @@ jobs:
           wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
           ./appimagetool-x86_64.AppImage --appimage-extract >/dev/null 2>&1 || true
-          # The extracted squashfs-root/AppRun is the actual tool
-          sed -i 's|APPDIR=.*|APPDIR="$(pwd)/squashfs-root"|' squashfs-root/AppRun
+          # Remove the AppImage itself so it doesn't get picked up by artifact glob
+          rm -f appimagetool-x86_64.AppImage
 
       - name: Build AppDir
         run: |
@@ -292,13 +292,13 @@ jobs:
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
           ARCH=x86_64 ./squashfs-root/AppRun AppDir "wifi-qr-connect-${VERSION}-x86_64.AppImage"
-          ls -la *.AppImage
+          ls -la wifi-qr-connect-*.AppImage
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: appimage
-          path: "*.AppImage"
+          path: "wifi-qr-connect-*.AppImage"
 
   # ──────────────────────────────────────────────────────────────────────
   # Publish all artifacts to the GitHub Release
