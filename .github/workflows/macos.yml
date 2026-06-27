@@ -13,36 +13,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install zbar pyzbar pillow numpy python-tk
-
-      - name: Create package structure
-        run: |
-          mkdir -p wifi-qr-connect-${{ github.ref_name }}/bin
-          mkdir -p wifi-qr-connect-${{ github.ref_name }}/share/man/man1
-
-          cp src/wifi-qr-connect wifi-qr-connect-${{ github.ref_name }}/bin/
-          cp src/wifi-qr-gui wifi-qr-connect-${{ github.ref_name }}/bin/
-
-          # Create man page
-          cat > wifi-qr-connect-${{ github.ref_name }}/share/man/man1/wifi-qr-connect.1 << MAN
-          .TH WIFI-QR-CONNECT 1 "June 2024" "wifi-qr-connect" "User Commands"
-          .SH NAME
-          wifi-qr-connect \\- scan Android WiFi QR codes and auto-connect
-          .SH SYNOPSIS
-          wifi-qr-connect [OPTIONS] [IMAGE_FILE]
-          .SH DESCRIPTION
-          Scans Android WiFi QR codes and connects via nmcli.
-          .SH OPTIONS
-          \\-h, \\-\\-help    Show help
-          \\-i, \\-\\-image   Scan from image file
-          \\-\\-dry-run      Parse only, don't connect
-          \\-\\-show-password Show password in output
-          .SH SEE ALSO
-          nmcli(1)
-          MAN
+          brew install zbar pillow numpy
 
       - name: Create tarball
         run: |
+          mkdir -p wifi-qr-connect-${{ github.ref_name }}/usr/bin
+          cp src/wifi-qr-connect wifi-qr-connect-${{ github.ref_name }}/usr/bin/
+          cp src/wifi-qr-gui wifi-qr-connect-${{ github.ref_name }}/usr/bin/
           tar -czf wifi-qr-connect-${{ github.ref_name }}-macos-x86_64.tar.gz wifi-qr-connect-${{ github.ref_name }}
 
       - name: Upload artifact
@@ -59,9 +36,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: macos-package
+          path: dist
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
-          files: wifi-qr-connect-${{ github.ref_name }}-macos-x86_64.tar.gz
+          files: dist/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

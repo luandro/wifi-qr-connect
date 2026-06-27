@@ -16,10 +16,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-pyzbar python3-numpy desktop-file-utils rpm rpm-build
 
-      - name: Create package structure
+      - name: Create tarball
         run: |
           mkdir -p SOURCES/usr/{bin,share/applications,share/icons/hicolor/scalable/apps,share/doc/wifi-qr-connect}
-
           cp src/wifi-qr-connect SOURCES/usr/bin/
           cp src/wifi-qr-gui SOURCES/usr/bin/
           sed 's|Exec=wifi-qr-gui|Exec=/usr/bin/wifi-qr-gui|' packaging/wifi-qr-connect.desktop > SOURCES/usr/share/applications/wifi-qr-connect.desktop
@@ -27,53 +26,13 @@ jobs:
           cp README.md SOURCES/usr/share/doc/wifi-qr-connect/
 
           tar -czf SOURCES/wifi-qr-connect.tar.gz -C SOURCES .
-
-      - name: Build RPM
-        run: |
-          VERSION=${{ github.ref_name }}
-          mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-          cp SOURCES/wifi-qr-connect.tar.gz rpmbuild/SOURCES/
-
-          cat > SPECS/wifi-qr-connect.spec << SPEC
-Name: wifi-qr-connect
-Version: \$VERSION
-Release: 1%{?dist}
-Summary: Scan Android WiFi QR codes and auto-connect via NetworkManager
-License: MIT
-BuildArch: noarch
-
-%description
-WiFi QR Connect scans Android WiFi QR codes and automatically connects to the network
-using NetworkManager. Features both CLI and GUI interfaces with live webcam preview.
-
-%prep
-%setup -q -n .
-
-%build
-
-%install
-mkdir -p %{buildroot}
-cp -r %{_topdir}/SOURCES/* %{buildroot}/
-
-%files
-/usr/bin/wifi-qr-connect
-/usr/bin/wifi-qr-gui
-/usr/share/applications/wifi-qr-connect.desktop
-/usr/share/icons/hicolor/scalable/apps/wifi-qr-connect.svg
-/usr/share/doc/wifi-qr-connect/README.md
-
-%changelog
-* $(date +"%a %b %d %Y") Luandro <luandro@luandro.com> - \$VERSION
-- Initial package
-SPEC
-          cd rpmbuild
-          rpmbuild -bb ../SPECS/wifi-qr-connect.spec
+          tar -czf wifi-qr-connect-${{ github.ref_name }}-fedora.tar.gz -C SOURCES .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: rpm-package
-          path: rpmbuild/RPMS/noarch/wifi-qr-connect-*.rpm
+          path: wifi-qr-connect-${{ github.ref_name }}-fedora.tar.gz
           retention-days: 30
 
   release:
@@ -83,9 +42,10 @@ SPEC
       - uses: actions/download-artifact@v4
         with:
           name: rpm-package
+          path: dist
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
-          files: rpmbuild/RPMS/noarch/wifi-qr-connect-*.rpm
+          files: dist/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
