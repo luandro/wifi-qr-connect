@@ -243,7 +243,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           body: |
-            # WiFi QR Connect v${{ github.ref_name }}
+            # WiFi QR Connect ${{ github.ref_name }}
 
             Scan Android WiFi QR codes and auto-connect via NetworkManager.
 
