@@ -24,12 +24,19 @@ Go to the [latest release](https://github.com/luandro/wifi-qr-connect/releases/l
 | Debian/Ubuntu | `wifi-qr-connect_*_all.deb` | `sudo dpkg -i wifi-qr-connect_*.deb` |
 | Fedora/RHEL | `wifi-qr-connect-*.noarch.rpm` | `sudo dnf install wifi-qr-connect-*.rpm` |
 | Arch Linux | `wifi-qr-connect-*-arch.tar.gz` | See below |
+| Any Linux (portable) | `wifi-qr-connect-*-x86_64.AppImage` | `chmod +x *.AppImage && ./*.AppImage` |
 
 **Arch Linux** (AUR-style):
 ```bash
 tar -xzf wifi-qr-connect-*-arch.tar.gz
 cd wifi-qr-connect-*-arch
 makepkg -si
+```
+
+**AppImage** (no installation needed, but requires system GTK4/Python deps):
+```bash
+chmod +x wifi-qr-connect-*-x86_64.AppImage
+./wifi-qr-connect-*-x86_64.AppImage
 ```
 
 ### Option 2: Manual install

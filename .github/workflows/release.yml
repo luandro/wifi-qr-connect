@@ -32,20 +32,16 @@ jobs:
           mkdir -p "$PKGDIR/usr/share/icons/hicolor/scalable/apps"
           mkdir -p "$PKGDIR/usr/share/doc/wifi-qr-connect"
 
-          # Scripts
           cp src/wifi-qr-connect "$PKGDIR/usr/bin/"
           cp src/wifi-qr-gui "$PKGDIR/usr/bin/"
           chmod 755 "$PKGDIR/usr/bin/wifi-qr-connect" "$PKGDIR/usr/bin/wifi-qr-gui"
 
-          # Desktop entry + icon
           cp packaging/wifi-qr-connect.desktop "$PKGDIR/usr/share/applications/"
           cp assets/wifi-qr-icon.svg "$PKGDIR/usr/share/icons/hicolor/scalable/apps/wifi-qr-connect.svg"
 
-          # Docs
           cp README.md "$PKGDIR/usr/share/doc/wifi-qr-connect/"
           cp LICENSE "$PKGDIR/usr/share/doc/wifi-qr-connect/" 2>/dev/null || true
 
-          # Control file
           cat > "$PKGDIR/DEBIAN/control" << EOF
           Package: wifi-qr-connect
           Version: ${VERSION}
@@ -60,7 +56,6 @@ jobs:
            automatically connecting to the network using NetworkManager (nmcli).
           EOF
 
-          # Build the .deb
           dpkg-deb --build --root-owner-group "$PKGDIR"
 
       - name: Verify package
@@ -94,15 +89,12 @@ jobs:
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
 
-          # Set up RPM build tree
           mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS}
 
-          # Create source tarball
           tar -czf ~/rpmbuild/SOURCES/wifi-qr-connect-${VERSION}.tar.gz \
             --transform "s,^,wifi-qr-connect-${VERSION}/," \
             src packaging assets README.md
 
-          # Write spec file
           cat > ~/rpmbuild/SPECS/wifi-qr-connect.spec << 'SPECEOF'
           Name:           wifi-qr-connect
           Version:        %{version}
@@ -148,13 +140,10 @@ jobs:
           - Initial package
           SPECEOF
 
-          # Replace version placeholder
           sed -i "s/%{version}/${VERSION}/g" ~/rpmbuild/SPECS/wifi-qr-connect.spec
 
-          # Build RPM
           rpmbuild -bb ~/rpmbuild/SPECS/wifi-qr-connect.spec
 
-          # Copy to workspace root
           cp ~/rpmbuild/RPMS/noarch/*.rpm .
 
       - name: Verify package
@@ -187,12 +176,10 @@ jobs:
 
           mkdir -p arch-pkg
 
-          # Create source tarball
           tar -czf arch-pkg/wifi-qr-connect-${VERSION}.tar.gz \
             --transform "s,^,wifi-qr-connect-${VERSION}/," \
             src packaging assets README.md
 
-          # Write PKGBUILD
           cat > arch-pkg/PKGBUILD << EOF
           # Maintainer: Luandro <luandro@luandro.com>
           pkgname=wifi-qr-connect
@@ -216,7 +203,6 @@ jobs:
           }
           EOF
 
-          # Create a tarball of the PKGBUILD + source
           tar -czf wifi-qr-connect-${VERSION}-arch.tar.gz -C arch-pkg .
 
       - name: Upload artifact
@@ -226,10 +212,95 @@ jobs:
           path: "*.tar.gz"
 
   # ──────────────────────────────────────────────────────────────────────
+  # AppImage: portable single-file Linux binary
+  # Uses appimage-builder to bundle Python + GTK4 + all dependencies
+  # ──────────────────────────────────────────────────────────────────────
+  build-appimage:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Extract version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install appimagetool
+        run: |
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+      - name: Build AppDir
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          # Create AppDir structure
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/scalable/apps
+
+          # Copy scripts
+          cp src/wifi-qr-gui AppDir/usr/bin/
+          cp src/wifi-qr-connect AppDir/usr/bin/
+          chmod +x AppDir/usr/bin/wifi-qr-gui AppDir/usr/bin/wifi-qr-connect
+
+          # Desktop entry and icon
+          cp packaging/wifi-qr-connect.desktop AppDir/
+          cp assets/wifi-qr-icon.svg AppDir/wifi-qr-connect.svg
+          cp assets/wifi-qr-icon.svg AppDir/usr/share/icons/hicolor/scalable/apps/wifi-qr-connect.svg
+
+          # Create AppRun — a wrapper that uses system Python + system GTK4 libs
+          # (AppImage can't practically bundle Python GI bindings + GTK4;
+          #  this provides a portable launcher that uses system-installed deps)
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "$0")")"
+
+          # Check for required system tools
+          missing=()
+          command -v /usr/bin/python3 >/dev/null 2>&1 || missing+=("python3")
+          command -v nmcli >/dev/null 2>&1 || missing+=("network-manager")
+
+          if [ ${#missing[@]} -gt 0 ]; then
+              echo "Missing dependencies: ${missing[*]}"
+              echo "Install with:"
+              echo "  Debian/Ubuntu: sudo apt install python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-pyzbar python3-numpy python3-pil zbar-tools network-manager"
+              echo "  Fedora: sudo dnf install python3-gobject gtk4 libadwaita python3-pillow python3-numpy zbar NetworkManager"
+              echo "  Arch: sudo pacman -S python-gobject gtk4 libadwaita python-pillow python-numpy zbar networkmanager"
+              exit 1
+          fi
+
+          # Launch the GUI with system Python (has GI bindings)
+          exec /usr/bin/python3 "$HERE/usr/bin/wifi-qr-gui" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          # Create .DirIcon
+          python3 -c "
+          try:
+              import cairosvg
+              cairosvg.svg2png(url='assets/wifi-qr-icon.svg', write_to='AppDir/.DirIcon', output_width=256, output_height=256)
+          except Exception:
+              import shutil
+              shutil.copy('assets/wifi-qr-icon.svg', 'AppDir/.DirIcon')
+          "
+
+      - name: Build AppImage
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage AppDir "wifi-qr-connect-${VERSION}-x86_64.AppImage"
+          ls -la *.AppImage
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: appimage
+          path: "*.AppImage"
+
+  # ──────────────────────────────────────────────────────────────────────
   # Publish all artifacts to the GitHub Release
   # ──────────────────────────────────────────────────────────────────────
   publish-release:
-    needs: [build-deb, build-rpm, build-arch]
+    needs: [build-deb, build-rpm, build-arch, build-appimage]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v8
@@ -249,11 +320,12 @@ jobs:
 
             ## Install
 
-            | Distro | File | Command |
+            | Format | File | Command |
             |---|---|---|
             | Debian/Ubuntu | `wifi-qr-connect_*_all.deb` | `sudo dpkg -i wifi-qr-connect_*.deb` |
             | Fedora/RHEL | `wifi-qr-connect-*.noarch.rpm` | `sudo dnf install wifi-qr-connect-*.rpm` |
             | Arch Linux | `wifi-qr-connect-*-arch.tar.gz` | `tar -xzf … && cd … && makepkg -si` |
+            | AppImage | `wifi-qr-connect-*-x86_64.AppImage` | `chmod +x *.AppImage && ./*.AppImage` |
 
             ## Features
 
@@ -273,5 +345,6 @@ jobs:
             dist/deb-package/*.deb
             dist/rpm-package/*.rpm
             dist/arch-package/*.tar.gz
+            dist/appimage/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
