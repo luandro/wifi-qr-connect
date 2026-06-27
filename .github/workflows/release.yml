@@ -242,6 +242,33 @@ jobs:
       - name: Upload to release
         uses: softprops/action-gh-release@v3
         with:
+          body: |
+            # WiFi QR Connect v${{ github.ref_name }}
+
+            Scan Android WiFi QR codes and auto-connect via NetworkManager.
+
+            ## Install
+
+            | Distro | File | Command |
+            |---|---|---|
+            | Debian/Ubuntu | `wifi-qr-connect_*_all.deb` | `sudo dpkg -i wifi-qr-connect_*.deb` |
+            | Fedora/RHEL | `wifi-qr-connect-*.noarch.rpm` | `sudo dnf install wifi-qr-connect-*.rpm` |
+            | Arch Linux | `wifi-qr-connect-*-arch.tar.gz` | `tar -xzf … && cd … && makepkg -si` |
+
+            ## Features
+
+            - **CLI** — `wifi-qr-connect` (webcam or image file)
+            - **GUI** — `wifi-qr-gui` (GTK4/libadwaita, live webcam preview)
+            - WPA/WPA2/WPA3, WEP, open networks, hidden SSIDs
+            - Escaped special characters in SSID/password
+
+            ## Usage
+
+            ```bash
+            wifi-qr-connect              # scan with webcam
+            wifi-qr-connect photo.png    # scan from image
+            wifi-qr-gui                  # launch GUI
+            ```
           files: |
             dist/deb-package/*.deb
             dist/rpm-package/*.rpm
