@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=WiFi QR Connect
+Comment=Scan Android WiFi QR codes and auto-connect
+Exec=wifi-qr-gui
+Icon=wifi-qr-connect
+Terminal=false
+Type=Application
+Categories=Network;Utility;
+Keywords=wifi;qr;network;scanner;
+StartupNotify=true

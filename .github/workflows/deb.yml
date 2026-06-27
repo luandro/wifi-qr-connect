@@ -1,0 +1,62 @@
+name: Release - Debian/Ubuntu
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-pyzbar python3-numpy desktop-file-utils
+
+      - name: Verify scripts
+        run: |
+          bash -n src/wifi-qr-connect
+          python3 -m py_compile src/wifi-qr-gui
+          desktop-file-validate packaging/wifi-qr-connect.desktop || true
+
+      - name: Create package structure
+        run: |
+          mkdir -p wifi-qr-connect-${{ github.ref_name }}/usr/bin
+          mkdir -p wifi-qr-connect-${{ github.ref_name }}/usr/share/applications
+          mkdir -p wifi-qr-connect-${{ github.ref_name }}/usr/share/icons/hicolor/scalable/apps
+          mkdir -p wifi-qr-connect-${{ github.ref_name }}/usr/share/doc/wifi-qr-connect
+
+          cp src/wifi-qr-connect wifi-qr-connect-${{ github.ref_name }}/usr/bin/
+          cp src/wifi-qr-gui wifi-qr-connect-${{ github.ref_name }}/usr/bin/
+          cp packaging/wifi-qr-connect.desktop wifi-qr-connect-${{ github.ref_name }}/usr/share/applications/
+          cp assets/wifi-qr-icon.svg wifi-qr-connect-${{ github.ref_name }}/usr/share/icons/hicolor/scalable/apps/wifi-qr-connect.svg
+          cp README.md wifi-qr-connect-${{ github.ref_name }}/usr/share/doc/wifi-qr-connect/
+
+      - name: Create tarball
+        run: |
+          tar -czf wifi-qr-connect-${{ github.ref_name }}-linux-x86_64.tar.gz wifi-qr-connect-${{ github.ref_name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-package
+          path: wifi-qr-connect-${{ github.ref_name }}-linux-x86_64.tar.gz
+          retention-days: 30
+
+  release:
+    needs: build-deb
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: deb-package
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wifi-qr-connect-${{ github.ref_name }}-linux-x86_64.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

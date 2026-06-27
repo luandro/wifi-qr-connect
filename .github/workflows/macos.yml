@@ -1,0 +1,67 @@
+name: Release - macOS
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install zbar pyzbar pillow numpy python-tk
+
+      - name: Create package structure
+        run: |
+          mkdir -p wifi-qr-connect-${{ github.ref_name }}/bin
+          mkdir -p wifi-qr-connect-${{ github.ref_name }}/share/man/man1
+
+          cp src/wifi-qr-connect wifi-qr-connect-${{ github.ref_name }}/bin/
+          cp src/wifi-qr-gui wifi-qr-connect-${{ github.ref_name }}/bin/
+
+          # Create man page
+          cat > wifi-qr-connect-${{ github.ref_name }}/share/man/man1/wifi-qr-connect.1 << MAN
+          .TH WIFI-QR-CONNECT 1 "June 2024" "wifi-qr-connect" "User Commands"
+          .SH NAME
+          wifi-qr-connect \\- scan Android WiFi QR codes and auto-connect
+          .SH SYNOPSIS
+          wifi-qr-connect [OPTIONS] [IMAGE_FILE]
+          .SH DESCRIPTION
+          Scans Android WiFi QR codes and connects via nmcli.
+          .SH OPTIONS
+          \\-h, \\-\\-help    Show help
+          \\-i, \\-\\-image   Scan from image file
+          \\-\\-dry-run      Parse only, don't connect
+          \\-\\-show-password Show password in output
+          .SH SEE ALSO
+          nmcli(1)
+          MAN
+
+      - name: Create tarball
+        run: |
+          tar -czf wifi-qr-connect-${{ github.ref_name }}-macos-x86_64.tar.gz wifi-qr-connect-${{ github.ref_name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-package
+          path: wifi-qr-connect-${{ github.ref_name }}-macos-x86_64.tar.gz
+          retention-days: 30
+
+  release:
+    needs: build-macos
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-package
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wifi-qr-connect-${{ github.ref_name }}-macos-x86_64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

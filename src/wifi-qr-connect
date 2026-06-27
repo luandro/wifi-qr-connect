@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+#
+# wifi-qr-connect — Scan an Android WiFi QR code (webcam or image file)
+#                   and auto-connect via NetworkManager (nmcli).
+#
+# Android WiFi QR format:  WIFI:S:<SSID>;T:<WPA|WEP|nopass>;P:<password>;H:<true|false>;;
+#
+# Usage:
+#   wifi-qr-connect              # scan from webcam (live)
+#   wifi-qr-connect image.png    # scan from a screenshot/image file
+#   wifi-qr-connect --image img  # same as above, explicit
+#
+set -euo pipefail
+
+# ── helpers ─────────────────────────────────────────────────────────────
+usage() {
+    cat <<'EOF'
+Usage: wifi-qr-connect [OPTIONS] [IMAGE_FILE]
+
+Scan a WiFi QR code and connect automatically.
+
+Modes:
+  (no args)            Scan live from webcam using zbarcam
+  IMAGE_FILE           Decode QR from an image file using zbarimg
+  -i, --image FILE     Same as above (explicit)
+
+Options:
+  -h, --help           Show this help message
+  --show-password      Print the parsed password (default: hidden)
+  --dry-run            Parse QR but don't connect (for testing)
+
+Examples:
+  wifi-qr-connect                       # scan with webcam
+  wifi-qr-connect screenshot.png        # scan from image
+  wifi-qr-connect --dry-run photo.jpg   # test without connecting
+EOF
+    exit 0
+}
+
+die() { echo "ERROR: $*" >&2; exit 1; }
+
+# ── arg parsing ─────────────────────────────────────────────────────────
+MODE="webcam"
+IMAGE=""
+SHOW_PASS=false
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)    usage ;;
+        -i|--image)   MODE="image"; IMAGE="${2:-}"; shift 2 ;;
+        --show-password) SHOW_PASS=true; shift ;;
+        --dry-run)    DRY_RUN=true; shift ;;
+        -*|--)
+            # unknown flag that looks like an option
+            if [[ "$1" == "--" ]]; then shift; continue; fi
+            die "Unknown option: $1 (try --help)" ;;
+        *)
+            # positional → treat as image file
+            MODE="image"; IMAGE="$1"; shift ;;
+    esac
+done
+
+# ── scan QR code ────────────────────────────────────────────────────────
+RAW=""
+
+if [[ "$MODE" == "webcam" ]]; then
+    command -v zbarcam >/dev/null 2>&1 || die "zbarcam not found. Install: sudo apt install zbar-tools"
+    [[ -e /dev/video0 ]] || die "No webcam detected at /dev/video0"
+
+    echo ">>> Starting webcam scanner (zbarcam)…"
+    echo ">>> Point your camera at the WiFi QR code."
+    echo ">>> Press Ctrl-C once the code is captured."
+    echo ""
+
+    # zbarcam outputs "QR-Code:WIFI:..." — grab the first line, Ctrl-C to stop
+    RAW="$(timeout 120 zbarcam --raw --quiet /dev/video0 2>/dev/null | head -1 || true)"
+else
+    command -v zbarimg >/dev/null 2>&1 || die "zbarimg not found. Install: sudo apt install zbar-tools"
+    [[ -n "$IMAGE" ]] || die "No image file specified."
+    [[ -f "$IMAGE" ]] || die "File not found: $IMAGE"
+
+    RAW="$(zbarimg --raw --quiet "$IMAGE" 2>/dev/null | head -1 || true)"
+fi
+
+# strip trailing newline / whitespace
+RAW="$(echo -n "$RAW" | tr -d '\n\r' | sed 's/[[:space:]]*$//')"
+
+[[ -n "$RAW" ]] || die "No QR code detected."
+
+echo ">>> QR code detected."
+
+# ── parse WIFI: URI ─────────────────────────────────────────────────────
+# Format: WIFI:S:<SSID>;T:<auth>;P:<password>;H:<hidden>;;
+# Fields can be in any order; values may contain escaped chars (\;, \:, \\)
+
+# Accept both "WIFI:..." and "QR-Code:WIFI:..." prefixes
+RAW="${RAW#QR-Code:}"
+RAW="${RAW#QRCode:}"
+
+if [[ "$RAW" != WIFI:* ]]; then
+    echo ">>> QR content: $RAW"
+    die "This QR code is not a WiFi configuration code (expected WIFI:...)."
+fi
+
+# Strip "WIFI:" prefix and trailing semicolons
+PAYLOAD="${RAW#WIFI:}"
+PAYLOAD="${PAYLOAD%%;}"
+
+# Unescape \; \: \\ before splitting, using a placeholder for literal semicolons
+# so they don't interfere with field separation.
+PAYLOAD="${PAYLOAD//\\;/__SEMICOLON__}"
+PAYLOAD="${PAYLOAD//\\:/__COLON__}"
+PAYLOAD="${PAYLOAD//\\\\/__BACKSLASH__}"
+
+SSID=""
+AUTH="nopass"
+PASS=""
+HIDDEN="false"
+
+IFS=';' read -ra FIELDS <<< "$PAYLOAD"
+for field in "${FIELDS[@]}"; do
+    key="${field%%:*}"
+    val="${field#*:}"
+    # restore escaped characters
+    val="${val//__SEMICOLON__/;}"
+    val="${val//__COLON__/:}"
+    val="${val//__BACKSLASH__/\\}"
+
+    case "$key" in
+        S) SSID="$val" ;;
+        T) AUTH="$val" ;;
+        P) PASS="$val" ;;
+        H) HIDDEN="$val" ;;
+    esac
+done
+
+[[ -n "$SSID" ]] || die "Could not parse SSID from QR code."
+
+# ── display parsed info ─────────────────────────────────────────────────
+echo ""
+echo "  ┌──────────────────────────────────┐"
+echo "  │  SSID:     $SSID"
+echo "  │  Security: $AUTH"
+if $SHOW_PASS; then
+    echo "  │  Password: $PASS"
+else
+    if [[ -n "$PASS" ]]; then
+        echo "  │  Password: ******** (${#PASS} chars)"
+    else
+        echo "  │  Password: (none)"
+    fi
+fi
+echo "  │  Hidden:   $HIDDEN"
+echo "  └──────────────────────────────────┘"
+echo ""
+
+# ── connect via nmcli ───────────────────────────────────────────────────
+if $DRY_RUN; then
+    echo ">>> --dry-run: skipping connection."
+    exit 0
+fi
+
+command -v nmcli >/dev/null 2>&1 || die "nmcli not found. Install: sudo apt install network-manager"
+
+# nmcli auto-detects WPA/WEP from the AP during connection.
+# We only need password and hidden parameters.
+echo ">>> Connecting to '$SSID' via NetworkManager…"
+
+# Remove any existing connection with the same name
+nmcli connection delete "$SSID" >/dev/null 2>&1 || true
+
+if [[ "${HIDDEN,,}" == "true" ]]; then
+    nmcli device wifi connect "$SSID" password "$PASS" hidden yes 2>&1
+else
+    # WPA/WEP: password is needed; nmcli auto-detects security type
+    # Open networks (nopass): don't pass password at all
+    if [[ "${AUTH,,}" == "nopass" || "$AUTH" == "" || -z "$PASS" ]]; then
+        nmcli device wifi connect "$SSID" 2>&1
+    else
+        nmcli device wifi connect "$SSID" password "$PASS" 2>&1
+    fi
+fi
+
+# Check result
+if nmcli -t -f NAME connection show --active 2>/dev/null | grep -q "^${SSID}$"; then
+    echo ""
+    echo "✓ Successfully connected to '$SSID'"
+    exit 0
+else
+    echo ""
+    echo "⚠ Connection attempt finished. Verify with: nmcli connection show --active"
+    exit 1
+fi

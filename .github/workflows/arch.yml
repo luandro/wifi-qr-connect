@@ -1,0 +1,74 @@
+name: Release - Arch Linux
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-arch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-pyzbar python3-numpy
+
+      - name: Create PKGBUILD
+        run: |
+          cat > PKGBUILD << PKGBUILD
+          pkgname=wifi-qr-connect
+          pkgver=${{ github.ref_name }}
+          pkgrel=1
+          pkgdesc="Scan Android WiFi QR codes and auto-connect via NetworkManager"
+          arch=('any')
+          url="https://github.com/luandro/wifi-qr-connect"
+          license=('MIT')
+          depends=('zbar' 'python' 'python-pillow' 'python-numpy' 'gtk4' 'libadwaita')
+          source=("wifi-qr-connect::${{ github.ref_name }}")
+          noextract=("wifi-qr-connect" "wifi-qr-gui")
+
+          package() {
+            mkdir -p "\$pkgdir/usr/bin"
+            mkdir -p "\$pkgdir/usr/share/applications"
+            mkdir -p "\$pkgdir/usr/share/icons/hicolor/scalable/apps"
+            mkdir -p "\$pkgdir/usr/share/doc/\$pkgname"
+
+            cp src/wifi-qr-connect "\$pkgdir/usr/bin/"
+            cp src/wifi-qr-gui "\$pkgdir/usr/bin/"
+            cp packaging/wifi-qr-connect.desktop "\$pkgdir/usr/share/applications/"
+            cp assets/wifi-qr-icon.svg "\$pkgdir/usr/share/icons/hicolor/scalable/apps/wifi-qr-connect.svg"
+            cp README.md "\$pkgdir/usr/share/doc/\$pkgname/"
+          }
+          PKGBUILD
+
+      - name: Create tarball
+        run: |
+          tar -czf wifi-qr-connect-${{ github.ref_name }}-arch.tar.gz \
+            --transform 's|^|wifi-qr-connect/|\' \
+            src/wifi-qr-connect src/wifi-qr-gui \
+            packaging/wifi-qr-connect.desktop \
+            assets/wifi-qr-icon.svg README.md
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-package
+          path: wifi-qr-connect-${{ github.ref_name }}-arch.tar.gz
+          retention-days: 30
+
+  release:
+    needs: build-arch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: arch-package
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wifi-qr-connect-${{ github.ref_name }}-arch.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
