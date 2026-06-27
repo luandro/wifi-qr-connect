@@ -1,0 +1,250 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────
+  # Debian/Ubuntu: .deb package
+  # ──────────────────────────────────────────────────────────────────────
+  build-deb:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Extract version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build .deb package
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          PKGDIR="wifi-qr-connect_${VERSION}_all"
+
+          mkdir -p "$PKGDIR/DEBIAN"
+          mkdir -p "$PKGDIR/usr/bin"
+          mkdir -p "$PKGDIR/usr/share/applications"
+          mkdir -p "$PKGDIR/usr/share/icons/hicolor/scalable/apps"
+          mkdir -p "$PKGDIR/usr/share/doc/wifi-qr-connect"
+
+          # Scripts
+          cp src/wifi-qr-connect "$PKGDIR/usr/bin/"
+          cp src/wifi-qr-gui "$PKGDIR/usr/bin/"
+          chmod 755 "$PKGDIR/usr/bin/wifi-qr-connect" "$PKGDIR/usr/bin/wifi-qr-gui"
+
+          # Desktop entry + icon
+          cp packaging/wifi-qr-connect.desktop "$PKGDIR/usr/share/applications/"
+          cp assets/wifi-qr-icon.svg "$PKGDIR/usr/share/icons/hicolor/scalable/apps/wifi-qr-connect.svg"
+
+          # Docs
+          cp README.md "$PKGDIR/usr/share/doc/wifi-qr-connect/"
+          cp LICENSE "$PKGDIR/usr/share/doc/wifi-qr-connect/" 2>/dev/null || true
+
+          # Control file
+          cat > "$PKGDIR/DEBIAN/control" << EOF
+          Package: wifi-qr-connect
+          Version: ${VERSION}
+          Architecture: all
+          Maintainer: Luandro <luandro@luandro.com>
+          Depends: zbar-tools, network-manager, python3, python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1, python3-pyzbar, python3-numpy, python3-pil
+          Section: net
+          Priority: optional
+          Description: Scan Android WiFi QR codes and auto-connect via NetworkManager
+           WiFi QR Connect provides both a CLI tool and a GTK4/libadwaita GUI
+           for scanning Android WiFi QR codes from a webcam or image file and
+           automatically connecting to the network using NetworkManager (nmcli).
+          EOF
+
+          # Build the .deb
+          dpkg-deb --build --root-owner-group "$PKGDIR"
+
+      - name: Verify package
+        run: |
+          ls -la *.deb
+          dpkg-deb --info *.deb
+          dpkg-deb --contents *.deb
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-package
+          path: "*.deb"
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Fedora: .rpm package
+  # ──────────────────────────────────────────────────────────────────────
+  build-rpm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Extract version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install rpmbuild
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Build .rpm package
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          # Set up RPM build tree
+          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS}
+
+          # Create source tarball
+          tar -czf ~/rpmbuild/SOURCES/wifi-qr-connect-${VERSION}.tar.gz \
+            --transform "s,^,wifi-qr-connect-${VERSION}/," \
+            src packaging assets README.md
+
+          # Write spec file
+          cat > ~/rpmbuild/SPECS/wifi-qr-connect.spec << 'SPECEOF'
+          Name:           wifi-qr-connect
+          Version:        %{version}
+          Release:        1%{?dist}
+          Summary:        Scan Android WiFi QR codes and auto-connect via NetworkManager
+          License:        MIT
+          URL:            https://github.com/luandro/wifi-qr-connect
+          Source0:        %{name}-%{version}.tar.gz
+          BuildArch:      noarch
+          Requires:       zbar
+          Requires:       NetworkManager
+          Requires:       python3-gobject
+          Requires:       gtk4
+          Requires:       libadwaita
+          Requires:       python3-numpy
+          Requires:       python3-pillow
+          Requires:       python3-zbar
+
+          %description
+          WiFi QR Connect provides both a CLI tool and a GTK4/libadwaita GUI
+          for scanning Android WiFi QR codes from a webcam or image file and
+          automatically connecting to the network using NetworkManager.
+
+          %prep
+          %setup -q
+
+          %build
+
+          %install
+          install -D -m 755 src/wifi-qr-connect %{buildroot}/%{_bindir}/wifi-qr-connect
+          install -D -m 755 src/wifi-qr-gui %{buildroot}/%{_bindir}/wifi-qr-gui
+          install -D -m 644 packaging/wifi-qr-connect.desktop %{buildroot}/%{_datadir}/applications/wifi-qr-connect.desktop
+          install -D -m 644 assets/wifi-qr-icon.svg %{buildroot}/%{_datadir}/icons/hicolor/scalable/apps/wifi-qr-connect.svg
+
+          %files
+          %{_bindir}/wifi-qr-connect
+          %{_bindir}/wifi-qr-gui
+          %{_datadir}/applications/wifi-qr-connect.desktop
+          %{_datadir}/icons/hicolor/scalable/apps/wifi-qr-connect.svg
+
+          %changelog
+          * Thu Jun 27 2026 Luandro <luandro@luandro.com> - %{version}-1
+          - Initial package
+          SPECEOF
+
+          # Replace version placeholder
+          sed -i "s/%{version}/${VERSION}/g" ~/rpmbuild/SPECS/wifi-qr-connect.spec
+
+          # Build RPM
+          rpmbuild -bb ~/rpmbuild/SPECS/wifi-qr-connect.spec
+
+          # Copy to workspace root
+          cp ~/rpmbuild/RPMS/noarch/*.rpm .
+
+      - name: Verify package
+        run: |
+          ls -la *.rpm
+          rpm -qpi *.rpm
+          rpm -qpl *.rpm
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: rpm-package
+          path: "*.rpm"
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Arch Linux: PKGBUILD
+  # ──────────────────────────────────────────────────────────────────────
+  build-arch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Extract version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create Arch package
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          mkdir -p arch-pkg
+
+          # Create source tarball
+          tar -czf arch-pkg/wifi-qr-connect-${VERSION}.tar.gz \
+            --transform "s,^,wifi-qr-connect-${VERSION}/," \
+            src packaging assets README.md
+
+          # Write PKGBUILD
+          cat > arch-pkg/PKGBUILD << EOF
+          # Maintainer: Luandro <luandro@luandro.com>
+          pkgname=wifi-qr-connect
+          pkgver=${VERSION}
+          pkgrel=1
+          pkgdesc="Scan Android WiFi QR codes and auto-connect via NetworkManager"
+          arch=('any')
+          url="https://github.com/luandro/wifi-qr-connect"
+          license=('MIT')
+          depends=('zbar' 'networkmanager' 'python-gobject' 'gtk4' 'libadwaita' 'python-numpy' 'python-pillow' 'python-zbar')
+          source=("\$pkgname-\$pkgver.tar.gz")
+          sha256sums=('SKIP')
+
+          package() {
+              cd "\$srcdir/\$pkgname-\$pkgver"
+
+              install -Dm755 src/wifi-qr-connect "\$pkgdir/usr/bin/wifi-qr-connect"
+              install -Dm755 src/wifi-qr-gui "\$pkgdir/usr/bin/wifi-qr-gui"
+              install -Dm644 packaging/wifi-qr-connect.desktop "\$pkgdir/usr/share/applications/wifi-qr-connect.desktop"
+              install -Dm644 assets/wifi-qr-icon.svg "\$pkgdir/usr/share/icons/hicolor/scalable/apps/wifi-qr-connect.svg"
+          }
+          EOF
+
+          # Create a tarball of the PKGBUILD + source
+          tar -czf wifi-qr-connect-${VERSION}-arch.tar.gz -C arch-pkg .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: arch-package
+          path: "*.tar.gz"
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Publish all artifacts to the GitHub Release
+  # ──────────────────────────────────────────────────────────────────────
+  publish-release:
+    needs: [build-deb, build-rpm, build-arch]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+
+      - name: List artifacts
+        run: find dist -type f -exec ls -la {} \;
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/deb-package/*.deb
+            dist/rpm-package/*.rpm
+            dist/arch-package/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

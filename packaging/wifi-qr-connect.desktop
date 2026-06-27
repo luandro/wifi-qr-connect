@@ -5,6 +5,6 @@ Exec=wifi-qr-gui
 Icon=wifi-qr-connect
 Terminal=false
 Type=Application
-Categories=Network;Utility;
+Categories=Network;
 Keywords=wifi;qr;network;scanner;
 StartupNotify=true
