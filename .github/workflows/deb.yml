@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   build-deb:
     runs-on: ubuntu-latest
@@ -22,7 +25,7 @@ jobs:
           python3 -m py_compile src/wifi-qr-gui
           desktop-file-validate packaging/wifi-qr-connect.desktop || true
 
-      - name: Create package structure
+      - name: Create tarball
         run: |
           mkdir -p wifi-qr-connect-${{ github.ref_name }}/usr/bin
           mkdir -p wifi-qr-connect-${{ github.ref_name }}/usr/share/applications
@@ -35,8 +38,6 @@ jobs:
           cp assets/wifi-qr-icon.svg wifi-qr-connect-${{ github.ref_name }}/usr/share/icons/hicolor/scalable/apps/wifi-qr-connect.svg
           cp README.md wifi-qr-connect-${{ github.ref_name }}/usr/share/doc/wifi-qr-connect/
 
-      - name: Create tarball
-        run: |
           tar -czf wifi-qr-connect-${{ github.ref_name }}-linux-x86_64.tar.gz wifi-qr-connect-${{ github.ref_name }}
 
       - name: Upload artifact
@@ -58,6 +59,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.tar.gz
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

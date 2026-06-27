@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   build-fedora:
     runs-on: ubuntu-latest
@@ -18,14 +21,17 @@ jobs:
 
       - name: Create tarball
         run: |
-          mkdir -p SOURCES/usr/{bin,share/applications,share/icons/hicolor/scalable/apps,share/doc/wifi-qr-connect}
+          mkdir -p SOURCES/usr/bin
+          mkdir -p SOURCES/usr/share/applications
+          mkdir -p SOURCES/usr/share/icons/hicolor/scalable/apps
+          mkdir -p SOURCES/usr/share/doc/wifi-qr-connect
+
           cp src/wifi-qr-connect SOURCES/usr/bin/
           cp src/wifi-qr-gui SOURCES/usr/bin/
           sed 's|Exec=wifi-qr-gui|Exec=/usr/bin/wifi-qr-gui|' packaging/wifi-qr-connect.desktop > SOURCES/usr/share/applications/wifi-qr-connect.desktop
           cp assets/wifi-qr-icon.svg SOURCES/usr/share/icons/hicolor/scalable/apps/wifi-qr-connect.svg
           cp README.md SOURCES/usr/share/doc/wifi-qr-connect/
 
-          tar -czf SOURCES/wifi-qr-connect.tar.gz -C SOURCES .
           tar -czf wifi-qr-connect-${{ github.ref_name }}-fedora.tar.gz -C SOURCES .
 
       - name: Upload artifact

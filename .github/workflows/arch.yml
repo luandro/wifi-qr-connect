@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   build-arch:
     runs-on: ubuntu-latest
@@ -18,11 +21,18 @@ jobs:
 
       - name: Create tarball
         run: |
-          tar -czf wifi-qr-connect-${{ github.ref_name }}-arch.tar.gz \
-            --transform 's|^|wifi-qr-connect/|\' \
-            src/wifi-qr-connect src/wifi-qr-gui \
-            packaging/wifi-qr-connect.desktop \
-            assets/wifi-qr-icon.svg README.md
+          mkdir -p wifi-qr-connect-${{ github.ref_name }}/usr/bin
+          mkdir -p wifi-qr-connect-${{ github.ref_name }}/usr/share/applications
+          mkdir -p wifi-qr-connect-${{ github.ref_name }}/usr/share/icons/hicolor/scalable/apps
+          mkdir -p wifi-qr-connect-${{ github.ref_name }}/usr/share/doc/wifi-qr-connect
+
+          cp src/wifi-qr-connect wifi-qr-connect-${{ github.ref_name }}/usr/bin/
+          cp src/wifi-qr-gui wifi-qr-connect-${{ github.ref_name }}/usr/bin/
+          cp packaging/wifi-qr-connect.desktop wifi-qr-connect-${{ github.ref_name }}/usr/share/applications/
+          cp assets/wifi-qr-icon.svg wifi-qr-connect-${{ github.ref_name }}/usr/share/icons/hicolor/scalable/apps/wifi-qr-connect.svg
+          cp README.md wifi-qr-connect-${{ github.ref_name }}/usr/share/doc/wifi-qr-connect/
+
+          tar -czf wifi-qr-connect-${{ github.ref_name }}-arch.tar.gz wifi-qr-connect-${{ github.ref_name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
