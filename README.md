@@ -10,7 +10,7 @@
 
 A blazing-fast Linux tool to scan Android WiFi QR codes and instantly connect via NetworkManager — no typing passwords ever again.
 
-![CI](https://img.shields.io/github/actions/workflow/status/luandro/wifi-qr-connect/release.yml?style=flat-square&logo=github&label=CI)
+![Release](https://img.shields.io/github/actions/workflow/status/luandro/wifi-qr-connect/release.yml?style=flat-square&logo=github&label=Release)
 ![Version](https://img.shields.io/github/v/release/luandro/wifi-qr-connect?style=flat-square&logo=git&label=Version)
 ![License](https://img.shields.io/github/license/luandro/wifi-qr-connect?style=flat-square&logo=opensourceinitiative&label=License)
 ![Downloads](https://img.shields.io/github/downloads/luandro/wifi-qr-connect/total?style=flat-square&logo=github&label=Downloads)
